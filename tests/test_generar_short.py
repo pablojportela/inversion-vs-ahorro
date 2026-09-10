@@ -106,3 +106,69 @@ def test_error_en_ensamblado_limpia_el_temporal_de_la_grafica(tmp_path, mocks_de
             generar_short.generar_short(ticker_a="AAA", ticker_b="BBB", titulo="Test", output_path=salida)
 
     assert not temporal.exists()
+
+
+# --- Ticker especial "CASH" (ahorro sin invertir) -------------------------
+
+def test_cash_no_descarga_nada_y_usa_precio_constante(tmp_path, monkeypatch, mocks_de_etapas):
+    llamadas = []
+
+    def precios_falsos_contador(ticker, fecha_inicio, fecha_fin):
+        llamadas.append(ticker)
+        fechas = pd.date_range("2020-01-01", periods=5, freq="D")
+        return pd.DataFrame({"precio": [100.0, 101.0, 102.0, 103.0, 104.0]}, index=fechas)
+
+    monkeypatch.setattr(datos, "obtener_precios", precios_falsos_contador)
+    salida = tmp_path / "short.mp4"
+
+    generar_short.generar_short(
+        ticker_a="SPY", ticker_b="CASH", titulo="Test", output_path=salida,
+        modo="dca", aportacion=100.0,
+    )
+
+    assert llamadas == ["SPY"]  # nunca se llama a datos.obtener_precios("CASH", ...)
+
+
+def test_ambos_tickers_cash_lanza_error(tmp_path, mocks_de_etapas):
+    salida = tmp_path / "short.mp4"
+    with pytest.raises(generar_short.GenerarShortError, match="CASH"):
+        generar_short.generar_short(ticker_a="cash", ticker_b="CASH", titulo="Test", output_path=salida)
+
+
+def test_cash_usa_etiqueta_por_defecto_descriptiva(tmp_path, mocks_de_etapas):
+    salida = tmp_path / "short.mp4"
+    generar_short.generar_short(ticker_a="SPY", ticker_b="CASH", titulo="Test", output_path=salida)
+    _, _, kwargs = mocks_de_etapas["render"][0]
+    assert kwargs["etiqueta_a"] == "SPY"
+    assert kwargs["etiqueta_b"] == "Ahorrar sin invertir"
+
+
+def test_cash_con_dca_da_exactamente_el_total_aportado(tmp_path, monkeypatch, mocks_de_etapas):
+    # Sustituimos el render falso por uno real para poder inspeccionar la
+    # simulación resultante en vez de solo verificar que se llamó.
+    capturado = {}
+
+    def render_inspeccion(datos_a, datos_b, titulo, output_path, **kwargs):
+        capturado["datos_b"] = datos_b.copy()
+        Path(output_path).write_bytes(b"grafica falsa")
+        return Path(output_path)
+
+    monkeypatch.setattr(render, "generar_video", render_inspeccion)
+    monkeypatch.setattr(generar_short, "render", render)
+
+    def precios_dos_meses(ticker, fecha_inicio, fecha_fin):
+        fechas = pd.date_range("2020-01-01", periods=45, freq="D")  # cruza a febrero
+        return pd.DataFrame({"precio": [100.0] * 45}, index=fechas)
+
+    monkeypatch.setattr(datos, "obtener_precios", precios_dos_meses)
+    salida = tmp_path / "short.mp4"
+
+    generar_short.generar_short(
+        ticker_a="SPY", ticker_b="CASH", titulo="Test", output_path=salida,
+        modo="dca", aportacion=100.0,
+    )
+
+    datos_b = capturado["datos_b"]
+    # DCA en enero y febrero: el ahorro sin invertir vale exactamente lo aportado (0% interés)
+    assert datos_b["valor_nominal"].iloc[-1] == pytest.approx(datos_b["aportado_acumulado"].iloc[-1])
+    assert datos_b["aportado_acumulado"].iloc[-1] == pytest.approx(200.0)

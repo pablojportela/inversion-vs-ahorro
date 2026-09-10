@@ -78,8 +78,8 @@ reales desde el año 2000.
 
 ```bash
 python pipeline/generar_short.py \
-    --ticker-a URTH --ticker-b BIL \
-    --titulo "Invertir vs ahorrar (2000-2024)" \
+    --ticker-a SPY --ticker-b CASH \
+    --titulo "Invertir 100€/mes vs ahorrar 100€/mes" \
     --output output/short.mp4
 ```
 
@@ -88,3 +88,18 @@ Short se genera solo con la gráfica. Cualquier fallo en cualquier etapa
 se envuelve en `GenerarShortError` indicando en qué etapa ocurrió
 (descarga, cálculo, render o ensamblado), y nunca deja un mp4 a medias
 en la ruta de salida.
+
+**Ticker especial `CASH`**: representa dinero guardado sin invertir
+(0% de rendimiento nominal). No se descarga de ninguna fuente — se
+construye una serie de precio constante alineada a las fechas del otro
+ticker, y se deja constancia explícita en los logs de que no es un
+dato de mercado. Es el escenario por defecto para "invertir vs ahorrar
+sin invertir" que pidió el usuario en vez de comparar dos activos reales.
+
+**Tickers reales recomendados** (verificados con historia desde el
+año 2000 o cerca): `SPY` (S&P 500, ETF, ajustado por dividendos, desde
+1993) para el lado de "invertir"; `SHY` (bonos EEUU 1-3 años, desde
+2002) si se quiere un segundo activo real en vez de `CASH`. Ojo:
+`URTH` (MSCI World) e `^IRX` (letra del tesoro) se descartaron como
+ejemplos porque no tienen historia desde 2000 (URTH) o no son un precio
+sino un tipo de interés (^IRX), incompatible con `calculo.py`.

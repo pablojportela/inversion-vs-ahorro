@@ -43,10 +43,10 @@ cálculo, render y ensamblado) en un único comando:
 
 ```bash
 python pipeline/generar_short.py \
-    --ticker-a URTH --etiqueta-a "Invertir (MSCI World)" \
-    --ticker-b BIL --etiqueta-b "Ahorrar (letras del tesoro)" \
+    --ticker-a SPY --etiqueta-a "Invertir en el S&P 500" \
+    --ticker-b CASH --etiqueta-b "Ahorrar sin invertir" \
     --modo dca --aportacion 100 \
-    --titulo "Invertir vs ahorrar (2000-2024)" \
+    --titulo "Invertir 100€/mes vs ahorrar 100€/mes" \
     --hook assets/hooks/hook_ejemplo.mp4 \
     --bgm assets/bgm/musica_ejemplo.mp3 \
     --output output/short_final.mp4
@@ -54,6 +54,12 @@ python pipeline/generar_short.py \
 
 `--hook` y `--bgm` son opcionales: sin ellos, el Short se genera solo
 con la gráfica animada (útil mientras no tengas todavía un clip de Flow).
+
+`CASH` es un ticker especial (no se descarga de ninguna fuente, no es un
+dato de mercado): modela dinero guardado sin invertir, con 0% de
+rendimiento nominal, para el escenario "invertir vs ahorrar sin invertir".
+Para comparar dos activos reales, usa dos tickers normales, p.ej.
+`--ticker-a SPY --ticker-b SHY`.
 
 ## Uso por piezas (para más control)
 
