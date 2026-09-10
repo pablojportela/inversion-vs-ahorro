@@ -12,6 +12,9 @@ cada salida intermedia; nunca deja un mp4 corrupto o vacío sin avisar.
 Uso:
     python compose_short.py --hook hook.mp4 --grafica grafica.mp4 \
         --output short_final.mp4 [--bgm musica.mp3] [--duracion 8]
+
+    El hook es opcional: sin --hook, el Short se genera solo con la
+    gráfica (útil mientras no haya clip de Flow todavía).
 """
 from __future__ import annotations
 
@@ -87,7 +90,7 @@ def _duracion_segundos(ruta: Path) -> float:
 
 
 def componer_short(
-    hook_path: Path,
+    hook_path: Path | None,
     grafica_path: Path,
     output_path: Path,
     bgm_path: Path | None = None,
@@ -98,6 +101,10 @@ def componer_short(
     (mp4 generado por render.generar_video a partir de datos reales) y
     añade `bgm_path` como música de fondo si se indica.
 
+    `hook_path` es opcional: si no se indica (todavía no hay clip de Flow),
+    el Short se genera solo con la gráfica, con música y recorte de
+    duración si se piden.
+
     El resultado se normaliza a 1080x1920 (9:16). Si algo falla (binario
     ausente, fichero de entrada vacío/inexistente, error de ffmpeg, salida
     corrupta), se lanza ComposeError con un mensaje claro y no queda ningún
@@ -106,37 +113,47 @@ def componer_short(
     _requerir_binario("ffmpeg")
     _requerir_binario("ffprobe")
 
-    _requerir_fichero_valido(hook_path, "El vídeo de hook")
+    if hook_path is not None:
+        _requerir_fichero_valido(hook_path, "El vídeo de hook")
     _requerir_fichero_valido(grafica_path, "El vídeo de la gráfica")
     if bgm_path is not None:
         _requerir_fichero_valido(bgm_path, "La música de fondo")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    concatenado_path = output_path.with_suffix(".concat.tmp.mp4")
     output_fue_escrito = False
 
+    if hook_path is not None:
+        concatenado_path = output_path.with_suffix(".concat.tmp.mp4")
+        concatenado_es_temporal = True
+    else:
+        # Sin hook, la propia gráfica es la entrada del siguiente paso: no
+        # se crea ningún fichero temporal que limpiar al terminar.
+        concatenado_path = grafica_path
+        concatenado_es_temporal = False
+
     try:
-        # 1) Normalizar ambos clips a 1080x1920 y concatenarlos (hook + gráfica).
-        filtro_concat = (
-            f"[0:v]scale={ANCHO_PX}:{ALTO_PX}:force_original_aspect_ratio=decrease,"
-            f"pad={ANCHO_PX}:{ALTO_PX}:(ow-iw)/2:(oh-ih)/2,setsar=1[v0];"
-            f"[1:v]scale={ANCHO_PX}:{ALTO_PX}:force_original_aspect_ratio=decrease,"
-            f"pad={ANCHO_PX}:{ALTO_PX}:(ow-iw)/2:(oh-ih)/2,setsar=1[v1];"
-            f"[v0][v1]concat=n=2:v=1:a=0[v]"
-        )
-        _ejecutar_ffmpeg(
-            [
-                "-i", str(hook_path),
-                "-i", str(grafica_path),
-                "-filter_complex", filtro_concat,
-                "-map", "[v]",
-                "-c:v", "libx264",
-                "-pix_fmt", "yuv420p",
-                str(concatenado_path),
-            ],
-            "concatenar hook y gráfica",
-        )
-        _validar_salida(concatenado_path, "Concatenación hook + gráfica")
+        if hook_path is not None:
+            # 1) Normalizar ambos clips a 1080x1920 y concatenarlos (hook + gráfica).
+            filtro_concat = (
+                f"[0:v]scale={ANCHO_PX}:{ALTO_PX}:force_original_aspect_ratio=decrease,"
+                f"pad={ANCHO_PX}:{ALTO_PX}:(ow-iw)/2:(oh-ih)/2,setsar=1[v0];"
+                f"[1:v]scale={ANCHO_PX}:{ALTO_PX}:force_original_aspect_ratio=decrease,"
+                f"pad={ANCHO_PX}:{ALTO_PX}:(ow-iw)/2:(oh-ih)/2,setsar=1[v1];"
+                f"[v0][v1]concat=n=2:v=1:a=0[v]"
+            )
+            _ejecutar_ffmpeg(
+                [
+                    "-i", str(hook_path),
+                    "-i", str(grafica_path),
+                    "-filter_complex", filtro_concat,
+                    "-map", "[v]",
+                    "-c:v", "libx264",
+                    "-pix_fmt", "yuv420p",
+                    str(concatenado_path),
+                ],
+                "concatenar hook y gráfica",
+            )
+            _validar_salida(concatenado_path, "Concatenación hook + gráfica")
 
         # 2) Añadir música de fondo (si se indica) y recortar a duracion_seg (si se indica).
         argumentos_finales = ["-i", str(concatenado_path)]
@@ -171,12 +188,15 @@ def componer_short(
             output_path.unlink(missing_ok=True)
         raise
     finally:
-        concatenado_path.unlink(missing_ok=True)
+        # Sin hook, concatenado_path ES grafica_path (una entrada, no un
+        # temporal nuestro): borrarlo aquí destruiría el fichero de entrada.
+        if concatenado_es_temporal:
+            concatenado_path.unlink(missing_ok=True)
 
 
 def _parsear_argumentos() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Ensambla el Short final a partir de hook + gráfica.")
-    parser.add_argument("--hook", required=True, type=Path, help="Clip cinemático de Flow (2-3s, sin datos).")
+    parser.add_argument("--hook", type=Path, default=None, help="Clip cinemático de Flow (2-3s, sin datos, opcional).")
     parser.add_argument("--grafica", required=True, type=Path, help="Vídeo de la gráfica animada (render.py).")
     parser.add_argument("--output", required=True, type=Path, help="Ruta del mp4 final.")
     parser.add_argument("--bgm", type=Path, default=None, help="Música de fondo libre de derechos (opcional).")

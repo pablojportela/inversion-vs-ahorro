@@ -68,8 +68,23 @@ reales desde el año 2000.
 - Selección real de tickers para cada escenario (inversión vs ahorro,
   activo A vs B) — por ahora los módulos son agnósticos al ticker
   concreto.
-- Script de orquestación que encadene `datos.py` → `calculo.py` →
-  `render.py` → `pipeline/compose_short.py` en un único comando para
-  generar un Short de principio a fin.
 - Primeros hooks reales de Google Flow en `assets/hooks/` y música en
   `assets/bgm/` (carpetas vacías por ahora, con `.gitkeep`).
+
+## Script de orquestación
+
+`pipeline/generar_short.py` encadena `datos.py` → `calculo.py` →
+`render.py` → `pipeline/compose_short.py` en un único comando:
+
+```bash
+python pipeline/generar_short.py \
+    --ticker-a URTH --ticker-b BIL \
+    --titulo "Invertir vs ahorrar (2000-2024)" \
+    --output output/short.mp4
+```
+
+El hook y la música son opcionales (`--hook`, `--bgm`); sin ellos, el
+Short se genera solo con la gráfica. Cualquier fallo en cualquier etapa
+se envuelve en `GenerarShortError` indicando en qué etapa ocurrió
+(descarga, cálculo, render o ensamblado), y nunca deja un mp4 a medias
+en la ruta de salida.

@@ -36,7 +36,26 @@ tests/
 pip install -r requirements.txt
 ```
 
-## Uso básico
+## Uso rápido: generar un Short de principio a fin
+
+`pipeline/generar_short.py` encadena todo el proceso (descarga de datos,
+cálculo, render y ensamblado) en un único comando:
+
+```bash
+python pipeline/generar_short.py \
+    --ticker-a URTH --etiqueta-a "Invertir (MSCI World)" \
+    --ticker-b BIL --etiqueta-b "Ahorrar (letras del tesoro)" \
+    --modo dca --aportacion 100 \
+    --titulo "Invertir vs ahorrar (2000-2024)" \
+    --hook assets/hooks/hook_ejemplo.mp4 \
+    --bgm assets/bgm/musica_ejemplo.mp3 \
+    --output output/short_final.mp4
+```
+
+`--hook` y `--bgm` son opcionales: sin ellos, el Short se genera solo
+con la gráfica animada (útil mientras no tengas todavía un clip de Flow).
+
+## Uso por piezas (para más control)
 
 ```python
 from inversion_vs_ahorro import datos, calculo, render
