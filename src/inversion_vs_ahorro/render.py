@@ -35,6 +35,11 @@ class RenderError(Exception):
     """Error al generar o validar el vídeo comparativo."""
 
 
+def _formatear_moneda(valor: float) -> str:
+    """Formatea un valor como '1.234 €' (punto de miles, sin decimales)."""
+    return f"{valor:,.0f} €".replace(",", ".")
+
+
 def _validar_entrada(
     datos_a: pd.DataFrame,
     datos_b: pd.DataFrame,
@@ -132,12 +137,22 @@ def generar_video(
     linea_a, = ax.plot([], [], color="#4fc3f7", linewidth=3, label=etiqueta_a)
     linea_b, = ax.plot([], [], color="#ff8a65", linewidth=3, label=etiqueta_b)
 
+    # Etiquetas con la cifra actual, pegadas a la punta de cada línea.
+    texto_valor_a = ax.text(
+        0, 0, "", color="#4fc3f7", fontsize=15, fontweight="bold", va="center", ha="left"
+    )
+    texto_valor_b = ax.text(
+        0, 0, "", color="#ff8a65", fontsize=15, fontweight="bold", va="center", ha="left"
+    )
+
+    n_max = max(n_puntos_a, n_puntos_b, 1)
+    margen_texto = n_max * 0.02  # separación entre la punta de la línea y la cifra
     valor_max = max(datos_a[columna_valor].max(), datos_b[columna_valor].max())
-    ax.set_xlim(0, max(n_puntos_a, n_puntos_b, 1))
+    ax.set_xlim(0, n_max * 1.22)  # hueco a la derecha para que quepa la cifra
     ax.set_ylim(0, valor_max * 1.1 if valor_max > 0 else 1)
     ax.set_title(titulo, color="white", fontsize=18, wrap=True)
     ax.tick_params(colors="white")
-    ax.legend(facecolor="#0d0d0d", labelcolor="white")
+    ax.legend(facecolor="#0d0d0d", labelcolor="white", loc="upper left")
 
     def actualizar(frame: int):
         progreso = (frame + 1) / n_frames
@@ -145,7 +160,17 @@ def generar_video(
         idx_b = min(int(progreso * n_puntos_b), n_puntos_b)
         linea_a.set_data(range(idx_a), datos_a[columna_valor].iloc[:idx_a])
         linea_b.set_data(range(idx_b), datos_b[columna_valor].iloc[:idx_b])
-        return linea_a, linea_b
+
+        if idx_a > 0:
+            valor_a = datos_a[columna_valor].iloc[idx_a - 1]
+            texto_valor_a.set_position((idx_a - 1 + margen_texto, valor_a))
+            texto_valor_a.set_text(_formatear_moneda(valor_a))
+        if idx_b > 0:
+            valor_b = datos_b[columna_valor].iloc[idx_b - 1]
+            texto_valor_b.set_position((idx_b - 1 + margen_texto, valor_b))
+            texto_valor_b.set_text(_formatear_moneda(valor_b))
+
+        return linea_a, linea_b, texto_valor_a, texto_valor_b
 
     animacion = FuncAnimation(fig, actualizar, frames=n_frames, blit=True)
 
