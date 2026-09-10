@@ -1,0 +1,33 @@
+# Entornos virtuales
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+
+# Caché de datos descargados
+.cache_datos/
+*.parquet
+*.csv
+
+# Vídeos y outputs generados
+output/
+*.mp4
+*.mov
+*.tmp.mp4
+
+# Assets pesados que no van al repo (se gestionan aparte)
+assets/hooks/*
+!assets/hooks/.gitkeep
+assets/bgm/*
+!assets/bgm/.gitkeep
+
+# Entornos de test / cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editor / SO
+.vscode/
+.idea/
+.DS_Store
