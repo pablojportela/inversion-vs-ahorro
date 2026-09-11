@@ -7,7 +7,9 @@ renderiza la gráfica comparativa animada (render.py) y, opcionalmente,
 la cose con un hook cinemático y música de fondo (compose_short.py).
 
 Uso mínimo (invertir 100€/mes en el S&P 500 vs ahorrar 100€/mes sin
-invertir, solo gráfica, sin hook ni música):
+invertir, solo gráfica, sin hook ni música). Por defecto sale un Short de
+~30s (27s de gráfica), el punto dulce de retención/repetición para este
+formato en el algoritmo de Shorts:
     python pipeline/generar_short.py \
         --ticker-a SPY --etiqueta-a "Invertir en el S&P 500" \
         --ticker-b CASH --etiqueta-b "Ahorrar sin invertir" \
@@ -18,7 +20,8 @@ invertir, solo gráfica, sin hook ni música):
 `CASH` es un ticker especial (no se descarga de ninguna fuente): modela
 dinero guardado sin invertir, con 0% de rendimiento nominal.
 
-Uso completo (dos tickers reales, con hook y música):
+Uso completo (dos tickers reales, con hook y música, sobreescribiendo la
+duración por defecto con una versión más corta y punchy de 20s):
     python pipeline/generar_short.py \
         --ticker-a SPY --etiqueta-a "Invertir (S&P 500)" \
         --ticker-b SHY --etiqueta-b "Ahorrar (bonos EEUU 1-3 años)" \
@@ -27,7 +30,7 @@ Uso completo (dos tickers reales, con hook y música):
         --titulo "Invertir vs ahorrar (2002-2024)" \
         --hook assets/hooks/hook_ejemplo.mp4 \
         --bgm assets/bgm/musica_ejemplo.mp3 \
-        --duracion-grafica 8 --duracion-final 10 \
+        --duracion-grafica 17 --duracion-final 20 \
         --output output/short_final.mp4
 """
 from __future__ import annotations
@@ -52,6 +55,13 @@ import compose_short  # noqa: E402 - módulo hermano en pipeline/
 from compose_short import ComposeError  # noqa: E402
 
 logger = logging.getLogger(__name__)
+
+# Duración por defecto pensada para el algoritmo de Shorts: YouTube permite
+# hasta 3 minutos, pero para este formato (hook + cifra creciendo) el punto
+# dulce de tasa de finalización/repetición está en 20-34s. 27s de gráfica +
+# ~3s de hook = 30s totales, corto para verse entero y rejugable.
+DURACION_GRAFICA_POR_DEFECTO = 27.0
+DURACION_FINAL_POR_DEFECTO = 30.0
 
 # Ticker especial (no es un ticker real, no se descarga de ninguna fuente):
 # representa dinero ahorrado sin invertir, con 0% de rendimiento nominal.
@@ -97,8 +107,8 @@ def generar_short(
     ipc_anual: float = 0.0,
     hook_path: Path | None = None,
     bgm_path: Path | None = None,
-    duracion_grafica: float = 8.0,
-    duracion_final: float | None = None,
+    duracion_grafica: float = DURACION_GRAFICA_POR_DEFECTO,
+    duracion_final: float | None = DURACION_FINAL_POR_DEFECTO,
 ) -> Path:
     """
     Encadena datos.py -> calculo.py -> render.py -> compose_short.py para
@@ -210,8 +220,14 @@ def _parsear_argumentos() -> argparse.Namespace:
     parser.add_argument("--titulo", required=True, help="Título mostrado en la gráfica.")
     parser.add_argument("--hook", type=Path, default=None, help="Clip cinemático de Flow (opcional).")
     parser.add_argument("--bgm", type=Path, default=None, help="Música de fondo libre de derechos (opcional).")
-    parser.add_argument("--duracion-grafica", type=float, default=8.0, help="Duración de la animación de la gráfica, en segundos.")
-    parser.add_argument("--duracion-final", type=float, default=None, help="Duración del Short final, en segundos (por defecto, sin recortar).")
+    parser.add_argument(
+        "--duracion-grafica", type=float, default=DURACION_GRAFICA_POR_DEFECTO,
+        help="Duración de la animación de la gráfica, en segundos (por defecto, 27s: hook ~3s + gráfica = 30s totales, el punto dulce de retención para Shorts).",
+    )
+    parser.add_argument(
+        "--duracion-final", type=float, default=DURACION_FINAL_POR_DEFECTO,
+        help="Duración del Short final, en segundos (por defecto, 30s, el máximo recomendado para retención en Shorts de este formato).",
+    )
     parser.add_argument("--output", type=Path, required=True, help="Ruta del mp4 final.")
     return parser.parse_args()
 
