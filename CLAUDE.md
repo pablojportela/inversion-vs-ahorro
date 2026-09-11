@@ -103,3 +103,13 @@ año 2000 o cerca): `SPY` (S&P 500, ETF, ajustado por dividendos, desde
 `URTH` (MSCI World) e `^IRX` (letra del tesoro) se descartaron como
 ejemplos porque no tienen historia desde 2000 (URTH) o no son un precio
 sino un tipo de interés (^IRX), incompatible con `calculo.py`.
+
+**Duración por defecto (`--duracion-grafica`/`--duracion-final`)**:
+27s de gráfica + ~3s de hook = 30s totales. YouTube no exige ninguna
+duración concreta para monetizar Shorts (solo ≤3 min y los 1.000
+suscriptores + 10M visualizaciones en 90 días) — este valor es una
+decisión de retención: para un formato de "cifra que crece", 20-34s
+es el rango donde el algoritmo suele premiar mejor la tasa de
+finalización y repetición, sin cortar antes del "reveal" final.
+Sobreescribible con `--duracion-grafica`/`--duracion-final` si se
+quiere una versión más corta y punchy (p.ej. 17s + 20s) o más larga.
