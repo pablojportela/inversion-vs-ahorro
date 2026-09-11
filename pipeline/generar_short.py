@@ -6,19 +6,25 @@ dos tickers (datos.py), simula el crecimiento de cada uno (calculo.py),
 renderiza la gráfica comparativa animada (render.py) y, opcionalmente,
 la cose con un hook cinemático y música de fondo (compose_short.py).
 
-Uso mínimo (solo gráfica, sin hook ni música):
+Uso mínimo (invertir 100€/mes en el S&P 500 vs ahorrar 100€/mes sin
+invertir, solo gráfica, sin hook ni música):
     python pipeline/generar_short.py \
-        --ticker-a URTH --ticker-b BIL \
-        --titulo "Invertir vs ahorrar (2000-2024)" \
+        --ticker-a SPY --etiqueta-a "Invertir en el S&P 500" \
+        --ticker-b CASH --etiqueta-b "Ahorrar sin invertir" \
+        --modo dca --aportacion 100 \
+        --titulo "Invertir 100€/mes vs ahorrar 100€/mes" \
         --output output/short.mp4
 
-Uso completo:
+`CASH` es un ticker especial (no se descarga de ninguna fuente): modela
+dinero guardado sin invertir, con 0% de rendimiento nominal.
+
+Uso completo (dos tickers reales, con hook y música):
     python pipeline/generar_short.py \
-        --ticker-a URTH --etiqueta-a "Invertir (MSCI World)" \
-        --ticker-b BIL --etiqueta-b "Ahorrar (letras del tesoro)" \
-        --modo dca --aportacion 100 --fecha-inicio 2000-01-01 \
+        --ticker-a SPY --etiqueta-a "Invertir (S&P 500)" \
+        --ticker-b SHY --etiqueta-b "Ahorrar (bonos EEUU 1-3 años)" \
+        --modo dca --aportacion 100 --fecha-inicio 2002-01-01 \
         --ajustar-inflacion --ipc-anual 0.03 \
-        --titulo "Invertir vs ahorrar (2000-2024)" \
+        --titulo "Invertir vs ahorrar (2002-2024)" \
         --hook assets/hooks/hook_ejemplo.mp4 \
         --bgm assets/bgm/musica_ejemplo.mp3 \
         --duracion-grafica 8 --duracion-final 10 \
@@ -30,6 +36,8 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+
+import pandas as pd
 
 # pipeline/ no forma parte del paquete instalable: añadimos src/ al path
 # para poder importar inversion_vs_ahorro sin necesidad de `pip install -e .`
@@ -45,9 +53,33 @@ from compose_short import ComposeError  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
+# Ticker especial (no es un ticker real, no se descarga de ninguna fuente):
+# representa dinero ahorrado sin invertir, con 0% de rendimiento nominal.
+# Se deja constancia explícita en los logs de que no son datos de mercado.
+TICKER_AHORRO_SIN_RENDIMIENTO = "CASH"
+
 
 class GenerarShortError(Exception):
     """Error de orquestación: envuelve el fallo real de la etapa que falló."""
+
+
+def _es_ahorro_sin_rendimiento(ticker: str) -> bool:
+    return ticker.strip().upper() == TICKER_AHORRO_SIN_RENDIMIENTO
+
+
+def _precios_ahorro_sin_rendimiento(fechas: pd.DatetimeIndex) -> pd.DataFrame:
+    """
+    Serie de "precio" constante (1.0) alineada a `fechas`: no es un dato de
+    mercado, es la asunción explícita de "dinero guardado sin invertir, sin
+    rendimiento". Con precio constante, simular_crecimiento da como
+    resultado exactamente el total aportado hasta la fecha (0% de interés).
+    """
+    logger.info(
+        "Ticker '%s': no se descargan datos reales, se usa una asunción de "
+        "0%% de rendimiento nominal (dinero guardado sin invertir).",
+        TICKER_AHORRO_SIN_RENDIMIENTO,
+    )
+    return pd.DataFrame({"precio": 1.0}, index=fechas)
 
 
 def generar_short(
@@ -72,20 +104,40 @@ def generar_short(
     Encadena datos.py -> calculo.py -> render.py -> compose_short.py para
     generar un Short completo a partir de dos tickers.
 
+    `ticker_a` o `ticker_b` puede ser "CASH": no se descarga nada, se
+    modela como dinero guardado sin invertir (0% de rendimiento nominal),
+    para el escenario "invertir vs ahorrar sin invertir".
+
     Cualquier fallo en cualquier etapa (descarga, cálculo, render o
     ensamblado) se propaga envuelto en GenerarShortError con un mensaje
     que dice claramente en qué etapa ocurrió; nunca se deja un mp4 a
     medias en `output_path`.
     """
-    etiqueta_a = etiqueta_a or ticker_a
-    etiqueta_b = etiqueta_b or ticker_b
+    if _es_ahorro_sin_rendimiento(ticker_a) and _es_ahorro_sin_rendimiento(ticker_b):
+        raise GenerarShortError(
+            f"Ambos tickers son '{TICKER_AHORRO_SIN_RENDIMIENTO}': no habría nada real que comparar."
+        )
+
+    etiqueta_a = etiqueta_a or (
+        "Ahorrar sin invertir" if _es_ahorro_sin_rendimiento(ticker_a) else ticker_a
+    )
+    etiqueta_b = etiqueta_b or (
+        "Ahorrar sin invertir" if _es_ahorro_sin_rendimiento(ticker_b) else ticker_b
+    )
     output_path = Path(output_path)
     grafica_tmp_path = output_path.with_name(f"{output_path.stem}.grafica.tmp.mp4")
 
     try:
         logger.info("Descargando precios de %s y %s...", ticker_a, ticker_b)
-        precios_a = datos.obtener_precios(ticker_a, fecha_inicio, fecha_fin)
-        precios_b = datos.obtener_precios(ticker_b, fecha_inicio, fecha_fin)
+        if _es_ahorro_sin_rendimiento(ticker_a):
+            precios_b = datos.obtener_precios(ticker_b, fecha_inicio, fecha_fin)
+            precios_a = _precios_ahorro_sin_rendimiento(precios_b.index)
+        elif _es_ahorro_sin_rendimiento(ticker_b):
+            precios_a = datos.obtener_precios(ticker_a, fecha_inicio, fecha_fin)
+            precios_b = _precios_ahorro_sin_rendimiento(precios_a.index)
+        else:
+            precios_a = datos.obtener_precios(ticker_a, fecha_inicio, fecha_fin)
+            precios_b = datos.obtener_precios(ticker_b, fecha_inicio, fecha_fin)
     except DatosError as exc:
         raise GenerarShortError(f"Fallo al descargar los precios: {exc}") from exc
 
@@ -139,8 +191,14 @@ def _parsear_argumentos() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Genera un Short completo (datos reales -> gráfica -> vídeo final) de principio a fin."
     )
-    parser.add_argument("--ticker-a", required=True, help="Ticker del primer escenario (p.ej. invertir).")
-    parser.add_argument("--ticker-b", required=True, help="Ticker del segundo escenario (p.ej. ahorrar).")
+    parser.add_argument(
+        "--ticker-a", required=True,
+        help="Ticker del primer escenario (p.ej. invertir), o 'CASH' para modelar ahorro sin invertir.",
+    )
+    parser.add_argument(
+        "--ticker-b", required=True,
+        help="Ticker del segundo escenario (p.ej. ahorrar), o 'CASH' para modelar ahorro sin invertir.",
+    )
     parser.add_argument("--etiqueta-a", default=None, help="Nombre a mostrar para el ticker A (por defecto, el ticker).")
     parser.add_argument("--etiqueta-b", default=None, help="Nombre a mostrar para el ticker B (por defecto, el ticker).")
     parser.add_argument("--modo", choices=["unico", "dca"], default="dca", help="Aportación única o DCA mensual.")
